@@ -63,7 +63,7 @@ Install with `prefix + I`.
 ## Manual install
 
 ```tmux
-source-file '/absolute/path/to/tmux-opencode/opencode.tmux'
+run-shell '/absolute/path/to/tmux-opencode/opencode.tmux'
 ```
 
 ## Status line integration
