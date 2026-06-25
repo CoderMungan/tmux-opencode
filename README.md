@@ -60,10 +60,53 @@ run '~/.tmux/plugins/tpm/tpm'
 
 Install with `prefix + I`.
 
+Update later with `prefix + U`.
+
+This is the recommended install path for most users.
+
 ## Manual install
 
 ```tmux
 run-shell '/absolute/path/to/tmux-opencode/opencode.tmux'
+```
+
+Example:
+
+```bash
+git clone https://github.com/CoderMungan/tmux-opencode.git ~/.tmux/plugins/tmux-opencode
+chmod +x ~/.tmux/plugins/tmux-opencode/opencode.tmux
+```
+
+```tmux
+run-shell '~/.tmux/plugins/tmux-opencode/opencode.tmux'
+```
+
+## Upgrade
+
+- TPM users: `prefix + U`
+- manual install users: `git -C /path/to/tmux-opencode pull`
+
+Then reload tmux:
+
+```tmux
+source-file ~/.tmux.conf
+```
+
+## Troubleshooting
+
+If `prefix + O` does nothing:
+
+1. confirm tmux version is `>= 3.2`
+2. confirm the plugin path exists
+3. reload tmux config
+4. for TPM installs, run `prefix + U`
+
+Useful checks:
+
+```bash
+tmux -V
+tmux list-keys | grep -E '^bind-key\s+-T\s+prefix\s+O\b'
+~/.tmux/plugins/tmux-opencode/scripts/opencode-status.sh
 ```
 
 ## Status line integration
