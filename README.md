@@ -2,7 +2,21 @@
 
 [![Release](https://img.shields.io/github/v/release/CoderMungan/tmux-opencode?sort=semver)](https://github.com/CoderMungan/tmux-opencode/releases)
 
+<p align="center">
+  <img src="assets/README-preview.svg" alt="tmux-opencode popup preview" width="100%" />
+</p>
+
 A bash-only tmux plugin for browsing, tracking, and resuming [opencode](https://opencode.ai/) sessions.
+
+If you also want durable context across coding sessions, check out [ctx](https://github.com/ActiveMemory/ctx):
+
+- a lightweight, file-based context system for AI coding assistants
+- useful for keeping tasks, decisions, and learnings persistent across terminal sessions
+
+## Community
+
+- Join our community: [kampus](https://discord.gg/kampus)
+- ctx community: [Discord](https://discord.gg/kQNZFemKuZ)
 
 It combines two sources of truth:
 
