@@ -12,10 +12,9 @@ It combines two sources of truth:
 That gives you one session browser for:
 
 - attached sessions already open in tmux
-- recent background sessions
-- idle sessions
-- stale sessions
-- archived sessions (optional)
+- sessions with active work in progress
+- sessions waiting for user approval/input
+- completed sessions
 
 ## Features
 
@@ -66,17 +65,15 @@ set -g status-right '#(/absolute/path/to/tmux-opencode-plugin/scripts/opencode-s
 Example output:
 
 ```text
-OC:12 A:2 B:3 I:5 S:1 C:1
+OC:12 P:3 A:1 D:8
 ```
 
 Where:
 
 - `OC` = total sessions shown
-- `A` = attached to a live tmux pane
-- `B` = busy or background
-- `I` = idle
-- `S` = stale
-- `C` = archived/closed
+- `P` = processing / active work
+- `A` = waiting for approval or human input
+- `D` = done
 
 ## Default key binding
 
@@ -124,6 +121,14 @@ When you open the popup:
 
 - if `fzf` is installed, you get fuzzy search
 - otherwise, you get a numbered fallback menu
+- each row shows a colored dot, normalized status, session title, and project directory
+- the internal `ses_...` session id is kept for resume/jump behavior but hidden from the UI
+
+Popup status colors:
+
+- yellow `process` = work is still running
+- red `approve` = waiting for approval or user input
+- gray `done` = no active work detected
 
 For orchestrator/multiagent workflows, child/subagent sessions are folded into their root parent session using `session.parent_id`:
 
@@ -164,10 +169,13 @@ It reads the `session` table and uses fields like:
 - `directory`
 - `path`
 - `time_updated`
+- `time_created`
 - `time_archived`
 - `agent`
 - `model`
 - `parent_id`
+
+It also inspects recent `message` and `part` records to distinguish active processing from approval/user-input waits.
 
 ### Merge strategy
 
@@ -177,12 +185,9 @@ When a tmux pane contains an opencode child session id in its process command, t
 
 ## Status meanings
 
-- `attached`: currently open in a tmux pane
-- `busy`: very recently updated in the database
-- `background`: recently active but not attached to a tmux pane
-- `idle`: known session with no recent activity spike
-- `stale`: older than `@opencode-stale-minutes`
-- `archived`: archived/closed in opencode metadata
+- `process`: currently running work, including live tmux-attached sessions and active tool execution
+- `approve`: waiting for approval or direct user input
+- `done`: no active work detected
 
 ## CLI helpers
 
@@ -194,7 +199,7 @@ When a tmux pane contains an opencode child session id in its process command, t
 The list script prints tab-separated records with normalized fields:
 
 ```text
-source  session_id  title  directory  path  status  updated_epoch  age_minutes  attached  pane_id  window_id  tmux_session_id  agent  model  archived  parent_id  child_count  child_status_summary  root_session_id
+source  session_id  title  directory  path  status  updated_epoch  age_minutes  attached  pane_id  window_id  tmux_session_id  agent  model  archived  parent_id  created_epoch  child_count  child_status_summary  root_session_id
 ```
 
 ## Validation
@@ -207,7 +212,7 @@ make validate
 
 - matching live tmux panes to stored sessions is best-effort
 - opencode database schema changes may require plugin updates
-- status values are inferred from timestamps, not from a formal opencode runtime API
+- runtime status is inferred from local SQLite records, not from a formal opencode runtime API
 
 ## Privacy
 

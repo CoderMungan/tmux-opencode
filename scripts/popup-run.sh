@@ -10,5 +10,5 @@ source "$PLUGIN_DIR/scripts/resume.sh"
 selection="$(opencode_select_session || true)"
 [ -n "$selection" ] || exit 0
 
-IFS=$'\t' read -r source session_id title directory path status updated age attached pane_id window_id tmux_session_id agent model archived <<<"$selection"
-opencode_resume_selected "$session_id" "$title" "$directory" "$status" "$pane_id" "$window_id"
+IFS=$'\037' read -r source session_id title directory path status updated age attached pane_id window_id tmux_session_id agent model archived parent created child_count summary root_id <<<"$(printf '%s' "$selection" | tr '\t' '\037')"
+opencode_resume_selected "$session_id" "$title" "$directory" "$status" "$attached" "$pane_id" "$window_id"

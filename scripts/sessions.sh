@@ -33,22 +33,24 @@ opencode_db_sessions() {
     BEGIN { OFS="\t" }
     {
       updated = ($6 ~ /^[0-9]+$/ ? $6 : 0)
+      created = ($7 ~ /^[0-9]+$/ ? $7 : 0)
       archived = ($8 ~ /^[0-9]+$/ ? $8 : 0)
       if (updated > 1000000000000) updated = int(updated / 1000)
+      if (created > 1000000000000) created = int(created / 1000)
       if (archived > 1000000000000) archived = int(archived / 1000)
       age = (updated > 0 ? int((now - updated) / 60) : -1)
-      status = "idle"
+      status = "done"
       if (archived > 0) {
-        status = "archived"
+        status = "done"
       } else if (age >= 0 && age <= busy_min) {
-        status = "busy"
+        status = "process"
       } else if (age >= 0 && age <= background_min) {
-        status = "background"
+        status = "process"
       } else if (age >= 0 && age > stale_min) {
-        status = "stale"
+        status = "done"
       }
 
-      print "db", $1, $2, $3, $4, status, updated, age, "0", "", "", "", $9, $10, archived, $5
+      print "db", $1, $2, $3, $4, status, updated, age, "0", "", "", "", $9, $10, archived, $5, created
     }
   '
 }
@@ -82,23 +84,87 @@ opencode_tmux_sessions() {
         }
 
         if (command ~ /(^|\/)(opencode)$/ || command ~ /^opencode$/ || title ~ /opencode/ || proc ~ /(^|[[:space:]\/])opencode([[:space:]]|$)/) {
-          print "tmux", session_id, "", $6, "", "attached", 0, 0, "1", $3, $2, $1, "", "", 0, ""
+          print "tmux", session_id, "", $6, "", "process", 0, 0, "1", $3, $2, $1, "", "", 0, "", 0
         }
       }
     '
 }
 
+opencode_runtime_states() {
+  local limit where
+  limit="$(opencode_safe_integer "$(opencode_max_sessions)" 50)"
+
+  where=""
+  if ! opencode_is_true "$(opencode_show_archived)"; then
+    where="where time_archived is null"
+  fi
+
+  opencode_sqlite "
+    select
+      s.id,
+      coalesce(s.parent_id, ''),
+      coalesce((
+        select json_extract(m.data, '$.role')
+        from message m
+        where m.session_id = s.id
+        order by m.time_created desc, m.id desc
+        limit 1
+      ), ''),
+      coalesce((
+        select json_extract(p.data, '$.type')
+        from part p
+        where p.session_id = s.id
+        order by p.time_created desc, p.id desc
+        limit 1
+      ), ''),
+      coalesce((
+        select json_extract(p.data, '$.tool')
+        from part p
+        where p.session_id = s.id
+        order by p.time_created desc, p.id desc
+        limit 1
+      ), ''),
+      coalesce((
+        select json_extract(p.data, '$.state.status')
+        from part p
+        where p.session_id = s.id
+        order by p.time_created desc, p.id desc
+        limit 1
+      ), '')
+    from session s
+    ${where}
+    order by cast(s.time_updated as integer) desc
+    limit ${limit};
+  " | awk -F'\t' '
+    BEGIN { OFS="\t" }
+    {
+      status = "done"
+      tool = tolower($5)
+      part_status = tolower($6)
+
+      if (part_status == "pending" || part_status == "running") {
+        if (tool == "question") status = "approve"
+        else status = "process"
+      }
+
+      print $1, status, $3, $4, $5, $6
+    }
+  '
+}
+
 opencode_merge_sessions() {
-  local tmp_db tmp_tmux tmp_db_idx
+  local tmp_db tmp_tmux tmp_db_idx tmp_runtime
   tmp_db="$(mktemp)"
   tmp_tmux="$(mktemp)"
   tmp_db_idx="$(mktemp)"
+  tmp_runtime="$(mktemp)"
   opencode_db_sessions >"$tmp_db" || true
   opencode_tmux_sessions >"$tmp_tmux" || true
+  opencode_runtime_states >"$tmp_runtime" || true
 
   awk -F'\t' 'BEGIN { OFS="\t" } $1=="db" { key = $4; if (!(key in seen)) { seen[key] = $2; print key, $2 } }' "$tmp_db" >"$tmp_db_idx"
 
-  awk -F'\t' -v db="$tmp_db" -v idx="$tmp_db_idx" '
+  awk -F'\t' -v db="$tmp_db" -v idx="$tmp_db_idx" -v runtime="$tmp_runtime" '
     BEGIN {
       OFS="\t"
       while ((getline line < db) > 0) {
@@ -112,6 +178,11 @@ opencode_merge_sessions() {
         pathId[f[1]] = f[2]
       }
       close(idx)
+      while ((getline line < runtime) > 0) {
+        split(line, f, "\t")
+        runtimeStatus[f[1]] = f[2]
+      }
+      close(runtime)
     }
     function root_id(id, r) {
       r = id
@@ -119,12 +190,9 @@ opencode_merge_sessions() {
       return r
     }
     function priority(status) {
-      if (status == "attached") return 6
-      if (status == "busy") return 5
-      if (status == "background") return 4
-      if (status == "idle") return 3
-      if (status == "stale") return 2
-      if (status == "archived") return 1
+      if (status == "approve") return 3
+      if (status == "process") return 2
+      if (status == "done") return 1
       return 0
     }
     function merge_status(a, b) { return (priority(b) > priority(a) ? b : a) }
@@ -144,14 +212,14 @@ opencode_merge_sessions() {
       } else if (path in pathId) {
         id = pathId[path]
       } else {
-        print "tmux-only", "pane:" pane, "Active tmux pane", path, path, "attached", 0, 0, "1", pane, win, sess, "", "", 0, "", 0, "", "tmux-only"
+        print "tmux-only", "pane:" pane, "Active tmux pane", path, path, "process", 0, 0, "1", pane, win, sess, "", "", 0, "", 0
         next
       }
 
       split(raw[id], f, "\t")
       root = root_id(id)
       if (id == root) {
-        f[6] = "attached"
+        f[6] = "process"
         f[9] = "1"
         f[10] = pane
         f[11] = win
@@ -160,7 +228,7 @@ opencode_merge_sessions() {
         for (i = 2; i <= 16; i++) raw[id] = raw[id] OFS f[i]
         attached[root] = 1
       } else {
-        child_status[id] = "attached"
+        child_status[id] = "process"
         child_pane[id] = pane
         child_win[id] = win
         child_sess[id] = sess
@@ -177,33 +245,36 @@ opencode_merge_sessions() {
         sess = f[12]
         summary[root] = ""
         child_count[root] = 0
+        status = merge_status(status, (runtimeStatus[id] == "" ? "done" : runtimeStatus[id]))
         for (child in parent) {
           if (parent[child] != id) continue
-          add_summary(root, (child_status[child] == "" ? "idle" : child_status[child]))
-          status = merge_status(status, (child_status[child] == "" ? "idle" : child_status[child]))
-          if (child_status[child] == "attached") {
+          child_runtime = (runtimeStatus[child] == "" ? (child_status[child] == "" ? "done" : child_status[child]) : merge_status(child_status[child], runtimeStatus[child]))
+          add_summary(root, child_runtime)
+          status = merge_status(status, child_runtime)
+          if (child_status[child] == "process") {
             if (pane == "") pane = child_pane[child]
             if (win == "") win = child_win[child]
             if (sess == "") sess = child_sess[child]
           }
         }
-        if (attached[root]) status = "attached"
+        if (attached[root]) status = "process"
         f[6] = status
-        f[9] = (status == "attached" ? "1" : f[9])
+        f[9] = (status == "process" ? "1" : f[9])
         f[10] = pane
         f[11] = win
         f[12] = sess
-        f[17] = child_count[root] + 0
-        f[18] = summary[root]
-        f[19] = root
+        f[17] = f[17]
+        f[18] = child_count[root] + 0
+        f[19] = summary[root]
+        f[20] = root
         line = f[1]
-        for (i = 2; i <= 19; i++) line = line OFS f[i]
+        for (i = 2; i <= 20; i++) line = line OFS f[i]
         print line
       }
     }
   ' "$tmp_tmux" | sort -t $'\t' -k7,7nr -k2,2
 
-  rm -f "$tmp_db" "$tmp_tmux" "$tmp_db_idx"
+  rm -f "$tmp_db" "$tmp_tmux" "$tmp_db_idx" "$tmp_runtime"
 }
 
 opencode_list_sessions() {
@@ -211,7 +282,7 @@ opencode_list_sessions() {
 }
 
 opencode_status_segment() {
-  local rows total attached busy background idle stale archived color enabled reset
+  local rows total process approve done color enabled reset
   rows="$(opencode_merge_sessions 2>/dev/null || true)"
   if [ -z "$rows" ]; then
     printf 'OC:0'
@@ -219,20 +290,17 @@ opencode_status_segment() {
   fi
 
   total=$(printf '%s\n' "$rows" | awk 'END { print NR + 0 }')
-  attached=$(printf '%s\n' "$rows" | awk -F'\t' '$6=="attached"{c++} END{print c+0}')
-  busy=$(printf '%s\n' "$rows" | awk -F'\t' '$6=="busy"{c++} END{print c+0}')
-  background=$(printf '%s\n' "$rows" | awk -F'\t' '$6=="background"{c++} END{print c+0}')
-  idle=$(printf '%s\n' "$rows" | awk -F'\t' '$6=="idle"{c++} END{print c+0}')
-  stale=$(printf '%s\n' "$rows" | awk -F'\t' '$6=="stale"{c++} END{print c+0}')
-  archived=$(printf '%s\n' "$rows" | awk -F'\t' '$6=="archived"{c++} END{print c+0}')
+  process=$(printf '%s\n' "$rows" | awk -F'\t' '$6=="process"{c++} END{print c+0}')
+  approve=$(printf '%s\n' "$rows" | awk -F'\t' '$6=="approve"{c++} END{print c+0}')
+  done=$(printf '%s\n' "$rows" | awk -F'\t' '$6=="done"{c++} END{print c+0}')
 
   enabled="$(opencode_status_colors)"
   if opencode_is_true "$enabled"; then
     reset='#[default]'
-    printf '#[fg=cyan]OC:%s%s #[fg=green]A:%s%s #[fg=yellow]B:%s%s #[fg=white]I:%s%s #[fg=red]S:%s%s #[fg=colour8]C:%s%s' \
-      "$total" "$reset" "$attached" "$reset" "$((busy + background))" "$reset" "$idle" "$reset" "$stale" "$reset" "$archived" "$reset"
+    printf '#[fg=cyan]OC:%s%s #[fg=yellow]P:%s%s #[fg=red]A:%s%s #[fg=white]D:%s%s' \
+      "$total" "$reset" "$process" "$reset" "$approve" "$reset" "$done" "$reset"
   else
-    printf 'OC:%s A:%s B:%s I:%s S:%s C:%s' "$total" "$attached" "$((busy + background))" "$idle" "$stale" "$archived"
+    printf 'OC:%s P:%s A:%s D:%s' "$total" "$process" "$approve" "$done"
   fi
 }
 

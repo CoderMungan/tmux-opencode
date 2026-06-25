@@ -33,7 +33,7 @@ opencode_resume_in_tmux() {
 }
 
 opencode_resume_selected() {
-  local session_id="${1:-latest}" title="${2:-}" directory="${3:-}" status="${4:-}" pane_id="${5:-}" window_id="${6:-}"
+  local session_id="${1:-latest}" title="${2:-}" directory="${3:-}" status="${4:-}" attached="${5:-}" pane_id="${6:-}" window_id="${7:-}"
 
   if ! opencode_has opencode; then
     opencode_log "opencode CLI not found in PATH"
@@ -49,7 +49,7 @@ opencode_resume_selected() {
     return 1
   fi
 
-  if [ "$status" = "attached" ] && [ -n "$pane_id" ] && opencode_has tmux; then
+  if [ "$attached" = "1" ] && [ -n "$pane_id" ] && opencode_has tmux; then
     opencode_jump_to_pane "$pane_id" "$window_id"
     return 0
   fi

@@ -1,14 +1,21 @@
 #!/usr/bin/env bash
 
 opencode_session_label() {
-  local session_id="$1" title="$2" directory="$3" status="$4" age_minutes="$5" pane_id="$6"
-  printf '%-10s  %-14s  %-30s  %-26s  %-8s  %s' \
+  local status="$1" title="$2" directory="$3"
+  local dot color reset
+  color=''
+  reset=$'\033[0m'
+  case "$status" in
+    approve) color=$'\033[31m' ;;
+    process) color=$'\033[33m' ;;
+    *) color=$'\033[90m' ;;
+  esac
+  dot="${color}●${reset}"
+  printf '%s %-8s  %-42s  %s' \
+    "$dot" \
     "$status" \
-    "$session_id" \
     "${title:-Untitled session}" \
-    "$(opencode_shorten_path "$directory")" \
-    "$(opencode_format_age "$age_minutes")" \
-    "${pane_id:-}"
+    "$(opencode_shorten_path "$directory")"
 }
 
 opencode_select_session() {
@@ -24,9 +31,10 @@ opencode_select_session() {
   fi
 
   if opencode_has fzf; then
-    while IFS=$'\t' read -r source session_id title directory path status updated age attached pane_id window_id tmux_session_id agent model archived; do
-      opencode_session_label "$session_id" "$title" "$directory" "$status" "$age" "$pane_id"
-      printf '\t%s\n' "$source	$session_id	$title	$directory	$path	$status	$updated	$age	$attached	$pane_id	$window_id	$tmux_session_id	$agent	$model	$archived"
+    while IFS= read -r row; do
+      IFS=$'\037' read -r source session_id title directory path status updated age attached pane_id window_id tmux_session_id agent model archived parent created child_count summary root_id <<<"$(printf '%s' "$row" | tr '\t' '\037')"
+      opencode_session_label "$status" "$title" "$directory"
+      printf '\t%s\n' "$row"
     done <"$tmp" |
       fzf --ansi --no-sort --prompt='opencode > ' --delimiter=$'\t' --with-nth=1 --layout=reverse --height=100% |
       cut -f2-
@@ -36,9 +44,10 @@ opencode_select_session() {
 
   printf '\nOpenCode sessions\n\n' >&2
   idx=0
-  while IFS=$'\t' read -r source session_id title directory path status updated age attached pane_id window_id tmux_session_id agent model archived; do
+  while IFS= read -r row; do
+    IFS=$'\037' read -r source session_id title directory path status updated age attached pane_id window_id tmux_session_id agent model archived parent created child_count summary root_id <<<"$(printf '%s' "$row" | tr '\t' '\037')"
     idx=$((idx + 1))
-    printf '%2d) %s\n' "$idx" "$(opencode_session_label "$session_id" "$title" "$directory" "$status" "$age" "$pane_id")" >&2
+    printf '%2d) %s\n' "$idx" "$(opencode_session_label "$status" "$title" "$directory")" >&2
   done <"$tmp"
   printf '\nSelect session number (blank to cancel): ' >&2
   IFS= read -r selected
