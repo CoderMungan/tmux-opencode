@@ -1,5 +1,7 @@
 # tmux-opencode-plugin
 
+[![Release](https://img.shields.io/github/v/release/CoderMungan/tmux-opencode-plugin?sort=semver)](https://github.com/CoderMungan/tmux-opencode-plugin/releases)
+
 A bash-only tmux plugin for browsing, tracking, and resuming [opencode](https://opencode.ai/) sessions.
 
 It combines two sources of truth:
