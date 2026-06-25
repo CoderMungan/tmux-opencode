@@ -1,6 +1,6 @@
-# tmux-opencode-plugin
+# tmux-opencode
 
-[![Release](https://img.shields.io/github/v/release/CoderMungan/tmux-opencode-plugin?sort=semver)](https://github.com/CoderMungan/tmux-opencode-plugin/releases)
+[![Release](https://img.shields.io/github/v/release/CoderMungan/tmux-opencode?sort=semver)](https://github.com/CoderMungan/tmux-opencode/releases)
 
 A bash-only tmux plugin for browsing, tracking, and resuming [opencode](https://opencode.ai/) sessions.
 
@@ -40,7 +40,7 @@ That gives you one session browser for:
 Add this to your `~/.tmux.conf`:
 
 ```tmux
-set -g @plugin 'CoderMungan/tmux-opencode-plugin'
+set -g @plugin 'CoderMungan/tmux-opencode'
 run '~/.tmux/plugins/tpm/tpm'
 ```
 
@@ -49,7 +49,7 @@ Install with `prefix + I`.
 ## Manual install
 
 ```tmux
-source-file '/absolute/path/to/tmux-opencode-plugin/opencode.tmux'
+source-file '/absolute/path/to/tmux-opencode/opencode.tmux'
 ```
 
 ## Status line integration
@@ -59,7 +59,7 @@ The plugin does not overwrite your existing status line automatically.
 Add the segment wherever you want:
 
 ```tmux
-set -g status-right '#(/absolute/path/to/tmux-opencode-plugin/scripts/opencode-status.sh) | %H:%M'
+set -g status-right '#(/absolute/path/to/tmux-opencode/scripts/opencode-status.sh) | %H:%M'
 ```
 
 Example output:
